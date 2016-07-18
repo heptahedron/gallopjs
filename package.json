@@ -1,0 +1,19 @@
+{
+  "name": "gll-parser-combinators",
+  "version": "1.0.0",
+  "description": "Handy lib for making parsers.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "gll",
+    "parser",
+    "combinator",
+    "graph-structured",
+    "stack",
+    "gss"
+  ],
+  "author": "Braxton Spence",
+  "license": "GPL-2.0"
+}
