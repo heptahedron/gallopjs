@@ -1,3 +1,5 @@
+const ABSTRACT_METHOD = 'Abstract method called!'
+
 export class Result {
   constructor(val, rem) {
     this.val = val
@@ -11,7 +13,7 @@ export class Failure extends Result {}
 export class Trampoline {
   constructor() {
     this.dispatchStack = []
-    this.backlinks = new Map()
+    this.resultCallbacks = new Map()
     this.alreadyTried = new Map()
   }
 
@@ -20,23 +22,23 @@ export class Trampoline {
       const [parser, stream] = this.dispatchStack.pop()
       
       parser.chain(this, stream, res => {
-        this.backlinks.get(stream).get(parser).forEach(
-          continuation => continuation(res)
+        this.resultCallbacks.get(stream).get(parser).forEach(
+          resultCallback => resultCallback(res)
         )
       })
     }
   }
 
-  add(parser, stream, continuation) {
-    if (!this.backlinks.has(stream)) {
-      this.backlinks.set(stream, new Map())
+  add(parser, stream, resultCallback) {
+    if (!this.resultCallbacks.has(stream)) {
+      this.resultCallbacks.set(stream, new Map())
     }
 
-    if (!this.backlinks.get(stream).has(parser)) {
-      this.backlinks.get(stream).set(parser, new Set())
+    if (!this.resultCallbacks.get(stream).has(parser)) {
+      this.resultCallbacks.get(stream).set(parser, new Set())
     }
 
-    this.backlinks.get(stream).get(parser).add(continuation)
+    this.resultCallbacks.get(stream).get(parser).add(resultCallback)
 
     if (!this.alreadyTried.contains(stream)) {
       this.alreadyTried.set(stream, new Set())
@@ -50,82 +52,57 @@ export class Trampoline {
 }
 
 export class Parser {
-  followedBy() {}
-}
-
-export class TerminalParser extends Parser {} 
-export class NonTerminalParser extends Parser {}
-
-export class NonTerminalSequentialParser extends NonTerminalParser {
-  constructor(first, second) {
-    super()
+  // since we don't have a trait for non-atomic parsers (a la Scala),
+  // and to reduce code duplication, we put this constructor in 
+  // the superclass, to be overridden if a subclass is atomic
+  constructor(first, next) {
     this.first = first
-    this.second = second
+    this.next = next
   }
 
-  chain(trampoline, stream, continuation) {
-    this.first.chain(trampoline, stream, res1 => {
-      if (res1 instanceof Success) {
-        this.second.chain(trampoline, res1.rem, res2 => {
-          if (res2 instanceof Success) {
-            f(new Success([res1.val, res2.val], res2.rem))
-          } else {
-            f(res2)
-          }
-        })
-      } else {
-        f(res1)
-      }
-    })
+  parse() { throw ABSTRACT_METHOD }
+  chain() { throw ABSTRACT_METHOD }
+  followedBy() { throw ABSTRACT_METHOD }
+  alternately(alternate) {
+    return new DisjunctiveParser(this, alternate)
   }
 }
 
-export class DisjunctiveParser extends NonTerminalParser {
-  constructor(first, second) {
-    super()
-    this.first = first
-    this.second = second
+export class TerminalParser extends Parser {
+  followedBy(next) {
+    if (next instanceof TerminalParser) {
+      return new TerminalSequentialParser(this, next)
+    } else {
+      return new NonTerminalSequentialParser(this, next)
+    }
   }
 
-  parse(stream) {
-    const trampoline = new Trampoline(),
-          results = []
-    this.chain(trampoline, stream, res => results.push(res))
-    trampoline.run()
-    return results
+  chain(trampoline, stream, resultCallback) {
+    resultCallback(this.parse(stream)) // no disjunctions, so we just parse
+  }
+}
+
+export class NonTerminalParser extends Parser {
+  _possibleParsesOf(parser, seen) {
+    if (seen.contains(parser)) {
+      return []
+    } 
+
+    if (parser instanceof NonTerminalParser) {
+      return parser._gatherPossible(parser, seen)
+    } 
+
+    return [parser]
   }
 
-  chain(trampoline, stream, continuation) {
-    this._gatherPossibilities().forEach(terminalParser => {
-      trampoline.add(terminalParser, stream, res => {
-        // paper says check for duplicate results? don't know why
-        continuation(res)
-      })
-    })
-  }
-
-  _gatherPossibilities(seen) {
-    if (!seen) seen = new Set()
+  _gatherPossible(seen) {
     seen.add(this)
 
-    let poss = []
-    if (!seen.contains(this.first)) {
-      if (this.first instanceof DisjunctiveParser) {
-        poss = poss.concat(this.first._gatherPossibilities(seen))
-      } else {
-        poss.push(this.first)
-      } 
-    }
+    // consider caching possibilities
+    // but would impact runtime alteration of parsers
 
-    if (!seen.contains(this.second)) {
-      if (this.second instanceof DisjunctiveParser) {
-        poss = poss.concat(this.second._gatherPossibilities(seen))
-      } else {
-        poss.push(this.second)
-      }
-    }
-
-    return poss
+    return (this._possibleParsesOf(this.first)
+            .concat(this._possibleParsesOf(this.next)))
   }
 }
 
@@ -147,27 +124,13 @@ export class StringLiteralParser extends TerminalParser {
       return new Failure(`Expected '${this.str}', but got '${recvdStr}'.`)
     }
   }
-
-  followedBy(next) {
-    if (next instanceof TerminalParser) {
-      return new TerminalSequentialParser(this, next)
-    } else {
-      return new NonTerminalSequentialParser(this, next)
-    }
-  }
 }
 
 export class TerminalSequentialParser extends TerminalParser {
-  constructor(first, second) {
-    super()
-    this.first = first
-    this.second = second
-  }
-
   parse(stream) {
     const res1 = this.first.parse(stream)
     if (res1 instanceof Success) {
-      const res2 = this.second.parse(res1.rem)
+      const res2 = this.next.parse(res1.rem)
       if (res2 instanceof Success) {
         return new Success([res1.val, res2.val], res2.rem)
       } else {
@@ -177,8 +140,43 @@ export class TerminalSequentialParser extends TerminalParser {
       return res1
     }
   }
+}
 
-  chain(trampoline, stream, continuation) {
-    continuation(this.parse(stream)) // no disjunctions, so we just parse
+export class NonTerminalSequentialParser extends NonTerminalParser {
+  chain(trampoline, stream, resultCallback) {
+    this.first.chain(trampoline, stream, res1 => {
+      if (res1 instanceof Success) {
+        this.next.chain(trampoline, res1.rem, res2 => {
+          if (res2 instanceof Success) {
+            resultCallback(new Success([res1.val, res2.val], res2.rem))
+          } else {
+            resultCallback(res2)
+          }
+        })
+      } else {
+        resultCallback(res1)
+      }
+    })
+  }
+}
+
+export class DisjunctiveParser extends NonTerminalParser {
+  parse(stream) {
+    const trampoline = new Trampoline(),
+          results = []
+    this.chain(trampoline, stream, res => results.push(res))
+    trampoline.run()
+    return results
+  }
+
+  chain(trampoline, stream, resultCallback) {
+    this._gatherPossible(new Set()).forEach(terminalParser => {
+      trampoline.add(terminalParser, stream, res => {
+        // it's possible that multiple disjunctions could have
+        // the same terminal parser as an option, which would result
+        //
+        resultCallback(res)
+      })
+    })
   }
 }
