@@ -53,6 +53,9 @@ export class Parser {
   followedBy() {}
 }
 
+export class TerminalParser extends Parser {} 
+export class NonTerminalParser extends Parser {}
+
 export class NonTerminalSequentialParser extends NonTerminalParser {
   constructor(first, second) {
     super()
@@ -76,9 +79,6 @@ export class NonTerminalSequentialParser extends NonTerminalParser {
     })
   }
 }
-
-export class TerminalParser extends Parser {} 
-export class NonTerminalParser extends Parser {}
 
 export class DisjunctiveParser extends NonTerminalParser {
   constructor(first, second) {
