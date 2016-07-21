@@ -14,14 +14,29 @@ export class Trampoline {
   constructor() {
     this.dispatchStack = []
     this.resultCallbacks = new Map()
-    this.alreadyTried = new Map()
+    this.dispatched = new Map()
+    this.results = new Map()
   }
 
   run() {
     while (this.dispatchStack.length > 0) {
+      // get next deferred parse and its point in the stream
       const [parser, stream] = this.dispatchStack.pop()
       
+      // execute provided callback with result of every possible subsequent
+      // parser at this point in the stream, store result in results set
       parser.chain(this, stream, res => {
+
+        if (!this.results.has(stream)) {
+          this.results.set(stream, new Map())
+        }
+        if (!this.results.get(stream).has(parser)) {
+          this.results.get(stream).set(parser, new Set())
+        }
+        if (res instanceof Success) {
+          this.results.get(stream).get(parser).add(res)
+        }
+
         this.resultCallbacks.get(stream).get(parser).forEach(
           resultCallback => resultCallback(res)
         )
@@ -29,6 +44,9 @@ export class Trampoline {
     }
   }
 
+  // defers parser evaluation at a certain point in the stream
+  // the parser may be later applied when new results from prior branches
+  // are evaluated 
   add(parser, stream, resultCallback) {
     if (!this.resultCallbacks.has(stream)) {
       this.resultCallbacks.set(stream, new Map())
@@ -38,15 +56,44 @@ export class Trampoline {
       this.resultCallbacks.get(stream).set(parser, new Set())
     }
 
+    /**
+     * The same parser could be deferred at the same point in the stream
+     * in two different contexts, which likely have different continuations
+     * therefrom, requiring a *set* of possible resultCallbacks.
+     * It is a "backlink" in that one can resume the parse from that point in
+     * the stream by calling the set of the callbacks stored there by all
+     * parsers with the result values from their predecessors to queue the
+     * subsequent parsers
+     */
     this.resultCallbacks.get(stream).get(parser).add(resultCallback)
 
-    if (!this.alreadyTried.contains(stream)) {
-      this.alreadyTried.set(stream, new Set())
-    }
-    
-    if (!this.alreadyTried.get(stream).contains(parser)) {
-      this.alreadyTried.get(stream).add(parser)
-      this.dispatchStack.push([parser, stream])
+    /**
+     * While it may be the same parser at the same point, the different
+     * possible contexts (i.e. containing parsers) it could occur in mandate
+     * a set of results from those parsers it was queued by.
+     * Different parse branches could reach the same point/parser at different
+     * times, so those that come later will be able to proceed with the results
+     * already obtained from the same parser in a different context that 
+     * arrived there first. When this happens, each result is immediately
+     * given to the resultCallback passed to #add().
+     */
+    if (this.results.has(stream)
+        && this.results.get(stream).has(parser)) {
+      this.results.get(stream).get(parser).forEach(resultCallback)
+    } else {
+      /**
+       * Ensures the same parser is not queued twice, which would not normally 
+       * happen if it already had its result stored, but could already be on
+       * the dispatchStack, requiring this extra check.
+       */
+      if (!this.dispatched.has(stream)) {
+        this.dispatched.set(stream, new Set())
+      }
+
+      if (!this.dispatched.get(stream).has(parser)) {
+        this.dispatched.get(stream).add(parser)
+        this.dispatchStack.push([parser, stream])
+      }
     }
   }
 }
@@ -83,26 +130,16 @@ export class TerminalParser extends Parser {
 }
 
 export class NonTerminalParser extends Parser {
-  _possibleParsesOf(parser, seen) {
-    if (seen.contains(parser)) {
-      return []
-    } 
-
-    if (parser instanceof NonTerminalParser) {
-      return parser._gatherPossible(parser, seen)
-    } 
-
-    return [parser]
+  parse(stream) {
+    const trampoline = new Trampoline(),
+          results = []
+    this.chain(trampoline, stream, res => results.push(res))
+    trampoline.run()
+    return results
   }
 
-  _gatherPossible(seen) {
-    seen.add(this)
-
-    // consider caching possibilities
-    // but would impact runtime alteration of parsers
-
-    return (this._possibleParsesOf(this.first)
-            .concat(this._possibleParsesOf(this.next)))
+  followedBy(next) {
+    return new NonTerminalSequentialParser(this, next)
   }
 }
 
@@ -161,22 +198,56 @@ export class NonTerminalSequentialParser extends NonTerminalParser {
 }
 
 export class DisjunctiveParser extends NonTerminalParser {
-  parse(stream) {
-    const trampoline = new Trampoline(),
-          results = []
-    this.chain(trampoline, stream, res => results.push(res))
-    trampoline.run()
-    return results
+  _possibleParsesOf(parser, seen) {
+    if (seen.has(parser)) {
+      return []
+    } 
+
+    if (parser instanceof DisjunctiveParser) {
+      return parser._gatherPossible(seen)
+    } 
+
+    return [parser]
+  }
+
+  _gatherPossible(seen) {
+    if (!seen.has(this)) {
+      seen.add(this)
+    } else {
+      return []
+    }
+
+    // consider caching possibilities
+    // but would impact runtime alteration of parsers
+
+    return (this._possibleParsesOf(this.first, seen)
+            .concat(this._possibleParsesOf(this.next, seen)))
   }
 
   chain(trampoline, stream, resultCallback) {
-    this._gatherPossible(new Set()).forEach(terminalParser => {
-      trampoline.add(terminalParser, stream, res => {
-        // it's possible that multiple disjunctions could have
-        // the same terminal parser as an option, which would result
-        //
-        resultCallback(res)
+    const results = new Set()
+    for (const possibleParser of this._gatherPossible(new Set())) {
+      trampoline.add(possibleParser, stream, res => {
+        /**
+         * Consider the following structure with D=Disjoint 
+         * N/T=(Non-)terminal (sequential parser) R=Recursive ref
+         *          N
+         *         / \
+         *   'a'->T   D
+         *           / \
+         *      ''->T   R
+         * DisjunctiveParser#parse() would instantiate a trampoline, then
+         * call #chain() with it and a callback which adds to the results list.
+         * A mutable set of results already given to this trampoline is 
+         * thus enclosed in this callback, ensuring that the trampoline will
+         * not redundantly add a continuation for the same parser at the same
+         * point in the stream with the same parse context.
+         */
+        if (!results.has(res)) {
+          resultCallback(res)
+          results.add(res)
+        }
       })
-    })
+    }
   }
 }
