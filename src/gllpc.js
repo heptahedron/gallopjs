@@ -205,18 +205,12 @@ export class DisjunctiveParser extends NonTerminalParser {
 
     if (parser instanceof DisjunctiveParser) {
       return parser._gatherPossible(seen)
-    } 
+    }  
 
     return [parser]
   }
 
   _gatherPossible(seen) {
-    if (!seen.has(this)) {
-      seen.add(this)
-    } else {
-      return []
-    }
-
     // consider caching possibilities
     // but would impact runtime alteration of parsers
 
@@ -226,6 +220,7 @@ export class DisjunctiveParser extends NonTerminalParser {
 
   chain(trampoline, stream, resultCallback) {
     const results = new Set()
+    // TODO ensure identical results are referentially identical
     for (const possibleParser of this._gatherPossible(new Set())) {
       trampoline.add(possibleParser, stream, res => {
         /**
