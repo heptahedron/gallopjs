@@ -158,7 +158,8 @@ export class StringLiteralParser extends TerminalParser {
     if (recvdStr === this.str) {
       return new Success(this.str, stream.substr(this.str.length))
     } else {
-      return new Failure(`Expected '${this.str}', but got '${recvdStr}'.`)
+      return new Failure(`Expected '${this.str}', but got '${recvdStr}'.`,
+                         stream)
     }
   }
 }

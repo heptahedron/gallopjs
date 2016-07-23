@@ -4,7 +4,10 @@
   "description": "Handy lib for making parsers.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "npm run build-dist",
+    "build-dist": "webpack",
+    "build-test": "webpack --config webpack.config.test.js",
+    "test": "npm run build-test && mocha test/all-test.js"
   },
   "keywords": [
     "gll",
@@ -20,6 +23,8 @@
     "babel-core": "^6.10.4",
     "babel-loader": "^6.2.4",
     "babel-preset-es2015": "^6.9.0",
+    "chai": "^3.5.0",
+    "mocha": "^2.5.3",
     "webpack": "^1.13.1"
   }
 }
