@@ -7,7 +7,7 @@
     "build": "npm run build-dist",
     "build-dist": "webpack",
     "build-test": "webpack --config webpack.config.test.js",
-    "test": "npm run build-test && mocha test/all-test.js"
+    "test": "npm run build-test && mocha test/all-tests.js"
   },
   "keywords": [
     "gll",

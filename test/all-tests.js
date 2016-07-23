@@ -60,7 +60,6 @@
 
 	_chai2.default.should();
 
-
 	describe('gllpc', function () {
 	  var bird = new gllpc.StringLiteralParser('bird'),
 	      istheword = new gllpc.StringLiteralParser('istheword'),
@@ -73,7 +72,8 @@
 	  var basicExpectations = [{ pClass: gllpc.StringLiteralParser,
 	    tests: [{ p: bird, str: 'bird', succ: { val: 'bird', rem: '' },
 	      it: 'should succeed and consume the whole string' }, { p: bird, str: 'birdextra', succ: { val: 'bird', rem: 'extra' },
-	      it: 'should not consume more than necessary' }] }];
+	      it: 'should not consume more than necessary' }, { p: bird, str: 'notbird', fail: { rem: 'notbird' },
+	      it: 'should fail to parse an incorrect string' }] }];
 
 	  basicExpectations.forEach(function (_ref) {
 	    var pClass = _ref.pClass;
@@ -89,11 +89,12 @@
 
 	        it(_it, function () {
 	          var res = p.parse(str),
-	              shouldSucceed = !!succ;
+	              shouldSucceed = !!succ,
+	              expRes = succ || fail;
 
 	          res.should.be.instanceof(shouldSucceed ? gllpc.Success : gllpc.Failure);
-	          res.val.should.equal((succ || fail).val);
-	          res.rem.should.equal((succ || fail).rem);
+	          expRes.val && res.val.should.equal(expRes.val);
+	          expRes.rem && res.rem.should.equal(expRes.rem);
 	        });
 	      });
 	    });

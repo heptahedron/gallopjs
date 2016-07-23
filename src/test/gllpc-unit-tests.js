@@ -1,5 +1,6 @@
 import chai from 'chai'
 chai.should()
+
 import * as gllpc from '../gllpc'
 
 describe('gllpc', function() {
@@ -17,7 +18,9 @@ describe('gllpc', function() {
         { p: bird, str: 'bird', succ: { val: 'bird', rem: '' },
           it: 'should succeed and consume the whole string' },
         { p: bird, str: 'birdextra', succ: { val: 'bird', rem: 'extra' },
-          it: 'should not consume more than necessary' }
+          it: 'should not consume more than necessary' },
+        { p: bird, str: 'notbird', fail: { rem: 'notbird' },
+          it: 'should fail to parse an incorrect string' },
       ] },
   ]
 
@@ -26,11 +29,14 @@ describe('gllpc', function() {
       tests.forEach(({ p, str, succ, fail, it: _it }) => {
         it(_it, function() {
           let res = p.parse(str),
-              shouldSucceed = !!succ
+              shouldSucceed = !!succ,
+              expRes = succ || fail
               
-          res.should.be.instanceof(shouldSucceed ? gllpc.Success : gllpc.Failure)
-          res.val.should.equal((succ || fail).val)
-          res.rem.should.equal((succ || fail).rem)
+          res.should.be.instanceof(shouldSucceed
+                                   ? gllpc.Success
+                                   : gllpc.Failure)
+          expRes.val && res.val.should.equal(expRes.val)
+          expRes.rem && res.rem.should.equal(expRes.rem)
         })
       })
     })
