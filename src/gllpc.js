@@ -96,9 +96,6 @@ export class Trampoline {
           this.results.get(stream).get(parser).add(res)
         }
 
-        console.log('---RUN CALLED---')
-        console.log(parser, stream, res)
-
         if (!this.saved.has(res)) this.saved.set(res, new Set())
         this.backlinks.get(stream).get(parser).forEach(
           backlink => {
