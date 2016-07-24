@@ -45,8 +45,8 @@ export class Success extends Result {
               ? this._successCache.get(rem).get(val)
               : this._successCache.get(rem)
                 .set(val, new Success(val, rem)).get(val)
-            : this._successCache.set(rem, new Map())
-              .set(val, new Success(val, rem)))
+            : this._successCache.set(rem, new Map()).get(rem)
+              .set(val, new Success(val, rem)).get(val))
   }
 }
 
@@ -55,13 +55,14 @@ export function success(val, rem) { return Success._getCached(val, rem) }
 
 export class Failure extends Result {
   static _getCached(val, rem) {
+    console.log('Failure _getCached called')
     return (this._failureCache.has(rem)
             ? this._failureCache.get(rem).has(val)
               ? this._failureCache.get(rem).get(val)
               : this._failureCache.get(rem)
                 .set(val, new Failure(val, rem)).get(val)
-            : this._failureCache.set(rem, new Map())
-              .set(val, new Failure(val, rem)))
+            : this._failureCache.set(rem, new Map()).get(rem)
+              .set(val, new Failure(val, rem)).get(val))
   }
 }
 export function failure(val, rem) { return Failure._getCached(val, rem) }
