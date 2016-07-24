@@ -38,7 +38,10 @@ describe('gllpc', function() {
         { p: simpleSeq, str: '', fail: { rem: '' },
           it: 'should properly handle the empty string' },
       ] },
-    // TODO more tests
+    { pClass: gllpc.DisjunctiveParser,
+      tests: [
+        { p: simpleDis, str: 'bird', succ: { val: 'bird' } }
+      ] }
   ]
 
   basicExpectations.forEach(({ pClass, tests }) => {
@@ -49,11 +52,18 @@ describe('gllpc', function() {
               shouldSucceed = !!succ,
               expRes = succ || fail
               
-          res.should.be.instanceof(shouldSucceed
-                                   ? gllpc.Success
-                                   : gllpc.Failure)
-          expRes.val && res.val.should.deep.equal(expRes.val)
-          expRes.rem && res.rem.should.equal(expRes.rem)
+          if (Array.isArray(expRes)) {
+            for (i in expRes) {
+              res[i].val && res[i].val.should.equal(expRes[i].val)
+              res[i].rem && res[i].rem.should.equal(expRes[i].rem)
+            }
+          } else {
+            res.should.be.instanceof(shouldSucceed
+                                     ? gllpc.Success
+                                     : gllpc.Failure)
+            res.val && res.val.should.equal(expRes.val)
+            res.rem && res.rem.should.equal(expRes.rem)
+          }
         })
       })
     })

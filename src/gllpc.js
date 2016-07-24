@@ -133,7 +133,10 @@ export class NonTerminalParser extends Parser {
   parse(stream) {
     const trampoline = new Trampoline(),
           results = []
-    this.chain(trampoline, stream, res => results.push(res))
+    this.chain(trampoline, stream, res => {
+      results.push(res)
+      console.log(res)
+    })
     trampoline.run()
     return results
   }
@@ -214,7 +217,7 @@ export class DisjunctiveParser extends NonTerminalParser {
   _gatherPossible(seen) {
     // consider caching possibilities
     // but would impact runtime alteration of parsers
-
+    seen.add(this)
     return (this._possibleParsesOf(this.first, seen)
             .concat(this._possibleParsesOf(this.next, seen)))
   }
@@ -239,6 +242,7 @@ export class DisjunctiveParser extends NonTerminalParser {
          * not redundantly add a continuation for the same parser at the same
          * point in the stream with the same parse context.
          */
+        console.log(results)
         if (!results.has(res)) {
           resultCallback(res)
           results.add(res)
