@@ -37,3 +37,5 @@ GLL's claim to fame, the ability to parse even ambiguous context-free grammars,
 is supported by returning a *list* of results. Left-recursive grammars are also
 supported, though right now constructing one using this library is not very
 elegant. Future revisions are coming.
+
+[1]: http://www.cs.uwm.edu/~dspiewak/papers/generalized-parser-combinators.pdf
